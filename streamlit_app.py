@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import pickle
 from catboost import CatBoostRegressor
 
@@ -32,50 +31,50 @@ st.write("Masukkan detail order untuk memprediksi estimasi waktu pengantaran (me
 # ============================
 # INPUT FORM
 # ============================
+
 with st.form("prediction_form"):
     col1, col2 = st.columns(2)
 
     with col1:
         distance = st.number_input("Jarak (km)", min_value=0.0, max_value=50.0, step=0.1)
-        hour = st.number_input("Jam Order (0–23)", min_value=0, max_value=23)
+        weather = st.selectbox("Cuaca", ["Clear", "Cloudy", "Rainy"])
+        traffic = st.selectbox("Tingkat Kemacetan", ["Low", "Medium", "High"])
+        time_of_day = st.selectbox("Waktu Order", ["Morning", "Afternoon", "Evening", "Night"])
 
     with col2:
-        weather = st.selectbox("Cuaca", ["Clear", "Cloudy", "Rainy"])
-        courier = st.selectbox("Tipe Kurir", ["Bike", "Car"])
+        vehicle = st.selectbox("Jenis Kendaraan Kurir", ["Bike", "Car", "Motor"])
         prep_time = st.number_input("Waktu Persiapan Merchant (menit)", min_value=0, max_value=120)
+        courier_exp = st.number_input("Pengalaman Kurir (tahun)", min_value=0, max_value=20)
+
+        distance_cat = st.selectbox("Kategori Jarak", ["Short", "Medium", "Long"])
+        courier_exp_cat = st.selectbox("Kategori Pengalaman Kurir", ["Newbie", "Intermediate", "Expert"])
 
     submitted = st.form_submit_button("Prediksi Sekarang")
 
 # ============================
 # PREDIKSI
 # ============================
+
 if submitted:
 
-    input_data = {
+    # Buat input EXACT sama kayak training
+    df_input = pd.DataFrame([{
         "Distance_km": distance,
         "Weather": weather,
-        "Hour": hour,
-        "Courier_Type": courier,
-        "Merchant_Prep_Time": prep_time
-    }
+        "Traffic_Level": traffic,
+        "Time_of_Day": time_of_day,
+        "Vehicle_Type": vehicle,
+        "Preparation_Time_min": prep_time,
+        "Courier_Experience_yrs": courier_exp,
+        "Distance_category": distance_cat,
+        "Courier_Experience_category": courier_exp_cat
+    }])
 
-    df_input = pd.DataFrame([input_data])
-
-    # Reorder supaya IDENTIK dengan data training
+    # Pastikan urutan kolom sama seperti training
     df_input = df_input.reindex(columns=train_columns)
 
-    # Prediksi
+    # Predict
     pred_time = model_cb.predict(df_input)[0]
-
-    # Load residual standard deviation (opsional)
-    try:
-        with open("residual_std.pkl", "rb") as f:
-            res_std = pickle.load(f)
-    except:
-        res_std = 10  # fallback
-
-    lower = pred_time - 1.96 * res_std
-    upper = pred_time + 1.96 * res_std
 
     # ============================
     # OUTPUT
@@ -83,11 +82,6 @@ if submitted:
     st.subheader("🔮 Hasil Prediksi")
     st.success(f"⏱ Estimasi waktu pengantaran: **{pred_time:.2f} menit**")
 
-    st.info(
-        f"📈 Confidence Interval 95%: **{lower:.2f} – {upper:.2f} menit**\n"
-        "Interval ini menunjukkan ketidakpastian model."
-    )
-
     st.write("---")
     st.write("📝 Input data yang digunakan:")
-    st.json(input_data)
+    st.json(df_input.to_dict(orient="records")[0])
