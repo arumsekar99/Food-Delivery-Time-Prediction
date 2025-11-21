@@ -1,19 +1,25 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from catboost import CatBoostRegressor
 import pickle
+from catboost import CatBoostRegressor
 
 # ============================
-# LOAD MODEL (CBM)
+# LOAD MODEL
 # ============================
 @st.cache_resource
 def load_model():
     model = CatBoostRegressor()
-    model.load_model("catboost_final.cbm")   # <-- load file .cbm
+    model.load_model("catboost_model.cbm")
     return model
 
 model_cb = load_model()
+
+# ============================
+# LOAD COLUMN ORDER
+# ============================
+with open("columns.pkl", "rb") as f:
+    train_columns = pickle.load(f)
 
 # ============================
 # STREAMLIT UI
@@ -21,7 +27,7 @@ model_cb = load_model()
 st.set_page_config(page_title="Delivery Time Prediction", layout="centered")
 
 st.title("📦 Delivery Time Prediction App")
-st.write("Masukkan detail order untuk memprediksi waktu pengantaran (menit).")
+st.write("Masukkan detail order untuk memprediksi estimasi waktu pengantaran (menit).")
 
 # ============================
 # INPUT FORM
@@ -55,28 +61,31 @@ if submitted:
 
     df_input = pd.DataFrame([input_data])
 
+    # Reorder supaya IDENTIK dengan data training
+    df_input = df_input.reindex(columns=train_columns)
+
     # Prediksi
     pred_time = model_cb.predict(df_input)[0]
 
-    # Confidence interval
+    # Load residual standard deviation (opsional)
     try:
         with open("residual_std.pkl", "rb") as f:
             res_std = pickle.load(f)
     except:
-        res_std = 10  # default fallback
+        res_std = 10  # fallback
 
     lower = pred_time - 1.96 * res_std
     upper = pred_time + 1.96 * res_std
 
     # ============================
-    # HASIL PREDIKSI
+    # OUTPUT
     # ============================
     st.subheader("🔮 Hasil Prediksi")
     st.success(f"⏱ Estimasi waktu pengantaran: **{pred_time:.2f} menit**")
 
     st.info(
-        f"📈 Confidence Interval (95%): **{lower:.2f} – {upper:.2f} menit**\n\n"
-        f"Rentang ini menunjukkan ketidakpastian prediksi model."
+        f"📈 Confidence Interval 95%: **{lower:.2f} – {upper:.2f} menit**\n"
+        "Interval ini menunjukkan ketidakpastian model."
     )
 
     st.write("---")
