@@ -2,6 +2,6 @@ streamlit
 pandas==2.2.2
 numpy
 scikit-learn
-catboost
+catboost==1.2.3
 xgboost
 matplotlib
