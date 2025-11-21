@@ -1,15 +1,16 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+from catboost import CatBoostRegressor
 import pickle
 
 # ============================
-# LOAD MODEL
+# LOAD MODEL (CBM)
 # ============================
 @st.cache_resource
 def load_model():
-    with open("catboost_final.pkl", "rb") as f:
-        model = pickle.load(f)
+    model = CatBoostRegressor()
+    model.load_model("catboost_final.cbm")   # <-- load file .cbm
     return model
 
 model_cb = load_model()
@@ -58,12 +59,11 @@ if submitted:
     pred_time = model_cb.predict(df_input)[0]
 
     # Confidence interval
-    # Kamu harus load residuals dari training/test kamu
     try:
         with open("residual_std.pkl", "rb") as f:
             res_std = pickle.load(f)
     except:
-        res_std = 10  # fallback default kalau ga ada file
+        res_std = 10  # default fallback
 
     lower = pred_time - 1.96 * res_std
     upper = pred_time + 1.96 * res_std
@@ -82,4 +82,3 @@ if submitted:
     st.write("---")
     st.write("📝 Input data yang digunakan:")
     st.json(input_data)
-
