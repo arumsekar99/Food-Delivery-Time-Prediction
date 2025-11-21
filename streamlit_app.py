@@ -1,18 +1,13 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
+import onnxruntime as ort
 import pickle
-from catboost import CatBoostRegressor
 
 # ============================
-# LOAD MODEL
+# LOAD MODEL ONNX
 # ============================
-@st.cache_resource
-def load_model():
-    model = CatBoostRegressor()
-    model.load_model("catboost_model.cbm")
-    return model
-
-model_cb = load_model()
+session = ort.InferenceSession("model_catboost.onnx", providers=['CPUExecutionProvider'])
 
 # ============================
 # LOAD COLUMN ORDER
@@ -21,17 +16,14 @@ with open("columns.pkl", "rb") as f:
     train_columns = pickle.load(f)
 
 # ============================
-# STREAMLIT UI
+# Streamlit UI
 # ============================
 st.set_page_config(page_title="Delivery Time Prediction", layout="centered")
 
-st.title("📦 Delivery Time Prediction App")
+st.title("📦 Delivery Time Prediction App (CatBoost-ONNX)")
 st.write("Masukkan detail order untuk memprediksi estimasi waktu pengantaran (menit).")
 
-# ============================
 # INPUT FORM
-# ============================
-
 with st.form("prediction_form"):
     col1, col2 = st.columns(2)
 
@@ -43,21 +35,17 @@ with st.form("prediction_form"):
 
     with col2:
         vehicle = st.selectbox("Jenis Kendaraan Kurir", ["Bike", "Car", "Motor"])
-        prep_time = st.number_input("Waktu Persiapan Merchant (menit)", min_value=0, max_value=120)
-        courier_exp = st.number_input("Pengalaman Kurir (tahun)", min_value=0, max_value=20)
-
+        prep_time = st.number_input("Waktu Persiapan (menit)", 0, 120)
+        courier_exp = st.number_input("Pengalaman Kurir (tahun)", 0, 20)
         distance_cat = st.selectbox("Kategori Jarak", ["Short", "Medium", "Long"])
         courier_exp_cat = st.selectbox("Kategori Pengalaman Kurir", ["Newbie", "Intermediate", "Expert"])
 
     submitted = st.form_submit_button("Prediksi Sekarang")
 
 # ============================
-# PREDIKSI
+# PREDICT
 # ============================
-
 if submitted:
-
-    # Buat input EXACT sama kayak training
     df_input = pd.DataFrame([{
         "Distance_km": distance,
         "Weather": weather,
@@ -70,18 +58,17 @@ if submitted:
         "Courier_Experience_category": courier_exp_cat
     }])
 
-    # Pastikan urutan kolom sama seperti training
+    # reorder sesuai training
     df_input = df_input.reindex(columns=train_columns)
 
-    # Predict
-    pred_time = model_cb.predict(df_input)[0]
+    # convert ke numpy float32
+    input_np = df_input.values.astype(np.float32)
 
-    # ============================
-    # OUTPUT
-    # ============================
+    # run ONNX inference
+    pred = session.run(None, {"input": input_np})[0][0][0]
+
     st.subheader("🔮 Hasil Prediksi")
-    st.success(f"⏱ Estimasi waktu pengantaran: **{pred_time:.2f} menit**")
+    st.success(f"⏱ Estimasi waktu pengantaran: **{pred:.2f} menit**")
 
-    st.write("---")
-    st.write("📝 Input data yang digunakan:")
+    st.write("📝 Input kamu:")
     st.json(df_input.to_dict(orient="records")[0])
